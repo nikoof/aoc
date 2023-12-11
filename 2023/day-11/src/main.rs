@@ -6,67 +6,98 @@ fn main() -> Result<()> {
     let input_file = env::args().nth(1).unwrap_or("./day-08.in".to_owned());
     let mut input = String::new();
     fs::File::open(&input_file)?.read_to_string(&mut input)?;
-    println!("Part 1: {}", part_one(&input));
-    // println!("Part 2: {}", part_two(&input));
+    println!("Part 1: {}", solve(&input, 2));
+    println!("Part 2: {}", solve(&input, 1000000));
 
     Ok(())
 }
 
-fn expand_universe(grid: Vec<Vec<char>>) -> Vec<Vec<char>> {
-    let grid = grid
-        .into_iter()
-        .map(|line| {
-            if line.iter().all(|&e| e == '.') {
-                vec![line.clone(), line.clone()]
-            } else {
-                vec![line.clone()]
-            }
-        })
-        .flatten()
-        .collect_vec();
+/*
+* A bit of an explanation for me in the future.
+* To deal with arbitrary (very large) scaling
+* factors, I represent the universe as a grid of `Tile`s, where each Tile can be either a `Galaxy`
+* or empty `Space`. Each variant stores it's "length".
+* I first parse the input into a 2d-array of `Tile`s, then I expand it by updating each line and
+* column that is comprised only of `Space`s with `Space`s with length == scaling_factor.
+*
+* Take for instance the following case and its representation:
+* .#.      Space(1)  Galaxy(1) Space(1)
+* ... ---> Space(1)  Space(1)  Space(1) <- This row should be expanded
+* #..      Galaxy(1) Space(1)  Space(1)
+*                                ^-------- This column should also be expanded
+*
+* Which, after expanding with a scaling factor of 2 becomes:
+* Space(1)  Galaxy(1) Space(2)      .#..
+* Space(2)  Space(2)  Space(2) ---> .... <-- These rows were expanded
+* Galaxy(1) Space(1)  Space(2)      .... <-^
+*                                   #...
+*                                     ^^---- These columns were expanded
+*
+* The distance between the galaxies at coordinates (y1, x1) and (y2, x2) respectively is the sum dx + dy,
+* where dx = sum(tiles between x1 and x2) and dy = sum(tiles between y1 and y2).
+*/
 
-    let transpose = (0..grid[0].len())
-        .map(|i| grid.iter().map(|row| row[i]).collect_vec())
-        .map(|line| {
-            if line.iter().all(|&e| e == '.') {
-                vec![line.clone(), line.clone()]
-            } else {
-                vec![line.clone()]
-            }
-        })
-        .flatten()
-        .collect_vec();
-
-    (0..transpose[0].len())
-        .map(|i| transpose.iter().map(|row| row[i]).collect_vec())
-        .collect_vec()
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum Tile {
+    Galaxy(usize),
+    Space(usize),
 }
 
-fn part_one(input: &str) -> isize {
-    let grid = input
+fn expand_universe(universe: &mut Vec<Vec<Tile>>, factor: usize) {
+    for row in universe.iter_mut() {
+        if row.iter().all(|tile| match tile {
+            Tile::Space(_) => true,
+            _ => false,
+        }) {
+            for tile in row.iter_mut() {
+                *tile = Tile::Space(factor);
+            }
+        }
+    }
+
+    for j in 0..universe[0].len() {
+        if universe.iter().all(|tile| match tile[j] {
+            Tile::Space(_) => true,
+            _ => false,
+        }) {
+            for i in 0..universe.len() {
+                universe[i][j] = Tile::Space(factor);
+            }
+        }
+    }
+}
+
+fn solve(input: &str, factor: usize) -> usize {
+    let mut universe = input
         .lines()
-        .map(|line| line.chars().collect_vec())
+        .map(|line| {
+            line.chars()
+                .map(|character| {
+                    match character {
+                        '#' => Some(Tile::Galaxy(1)),
+                        '.' => Some(Tile::Space(1)),
+                        _ => None,
+                    }
+                    .unwrap()
+                })
+                .collect_vec()
+        })
         .collect_vec();
 
-    let grid = expand_universe(grid);
+    // Maybe there is a way to avoid mutating here...
+    expand_universe(&mut universe, factor);
 
-    // println!("{}", input);
-    // println!(
-    //     "{}",
-    //     expand_galaxy(grid)
-    //         .into_iter()
-    //         .map(|line| line.iter().join(""))
-    //         .join("\n")
-    // );
-
-    let galaxies = grid
+    let galaxies = universe
         .iter()
         .enumerate()
         .map(|(i, row)| {
             row.iter()
                 .enumerate()
-                .filter(|&(_, &col)| col == '#')
-                .map(move |(j, _)| (i as isize, j as isize))
+                .filter(|&(_, &col)| match col {
+                    Tile::Galaxy(_) => true,
+                    _ => false,
+                })
+                .map(move |(j, _)| (i, j))
                 .collect_vec()
         })
         .flatten()
@@ -75,7 +106,24 @@ fn part_one(input: &str) -> isize {
     galaxies
         .iter()
         .tuple_combinations()
-        .map(|((y1, x1), (y2, x2))| (x2 - x1).abs() + (y2 - y1).abs())
+        .map(|(&(y1, x1), &(y2, x2))| {
+            let dx: usize = universe[y1][x1.min(x2)..x1.max(x2)]
+                .iter()
+                .map(|tile| match tile {
+                    Tile::Space(n) => n,
+                    Tile::Galaxy(n) => n,
+                })
+                .sum();
+
+            let dy: usize = (y1.min(y2)..y1.max(y2))
+                .map(|y| match universe[y][x1] {
+                    Tile::Galaxy(n) => n,
+                    Tile::Space(n) => n,
+                })
+                .sum();
+
+            dx + dy
+        })
         .sum()
 }
 
@@ -87,6 +135,11 @@ mod tests {
 
     #[rstest]
     #[case(indoc! {"
+        .#.
+        ...
+        #..
+    "}, 2, 4)]
+    #[case(indoc! {"
         ...#......
         .......#..
         #.........
@@ -97,19 +150,32 @@ mod tests {
         ..........
         .......#..
         #...#.....
-    "}, 374)]
-    fn test_part_one(#[case] input: &str, #[case] expected: isize) {
-        assert_eq!(expected, part_one(input));
+    "}, 2, 374)]
+    #[case(indoc! {"
+        ...#......
+        .......#..
+        #.........
+        ..........
+        ......#...
+        .#........
+        .........#
+        ..........
+        .......#..
+        #...#.....
+    "}, 10, 1030)]
+    #[case(indoc! {"
+        ...#......
+        .......#..
+        #.........
+        ..........
+        ......#...
+        .#........
+        .........#
+        ..........
+        .......#..
+        #...#.....
+    "}, 100, 8410)]
+    fn test_solution(#[case] input: &str, #[case] scaling_factor: usize, #[case] expected: usize) {
+        assert_eq!(expected, solve(input, scaling_factor));
     }
-
-    // #[test]
-    // fn test_part_two() {
-    //     let input = indoc! {"
-    //         0 3 6 9 12 15
-    //         1 3 6 10 15 21
-    //         10 13 16 21 30 45
-    //     "};
-    //
-    //     assert_eq!(2, part_two(input));
-    // }
 }
