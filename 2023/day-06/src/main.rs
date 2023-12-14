@@ -97,6 +97,5 @@ mod tests {
         let input = "Time:      7  15   30\nDistance:  9  40  200";
 
         assert_eq!(71503, part_two(&input));
-        panic!()
     }
 }
