@@ -3,7 +3,7 @@ use itertools::Itertools;
 use std::{env, fs, io::Read, iter::zip, ops::Not};
 
 fn main() -> Result<()> {
-    let input_file = env::args().nth(1).unwrap_or("./day-08.in".to_owned());
+    let input_file = env::args().nth(1).unwrap_or("./day-13.in".to_owned());
     let mut input = String::new();
     fs::File::open(&input_file)?.read_to_string(&mut input)?;
     println!("Part 1: {}", part_one(&input));
