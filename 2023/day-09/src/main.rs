@@ -61,7 +61,6 @@ fn part_two(input: &str) -> i32 {
 mod tests {
     use super::*;
     use indoc::indoc;
-    use rstest::*;
 
     #[test]
     fn test_part_one() {
