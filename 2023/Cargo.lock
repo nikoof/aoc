@@ -110,17 +110,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "day-10"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "indoc",
- "itertools",
- "num",
- "rstest",
-]
-
-[[package]]
 name = "day-11"
 version = "0.1.0"
 dependencies = [
@@ -143,6 +132,16 @@ dependencies = [
 
 [[package]]
 name = "day-14"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "indoc",
+ "itertools",
+ "rstest",
+]
+
+[[package]]
+name = "day-15"
 version = "0.1.0"
 dependencies = [
  "anyhow",
