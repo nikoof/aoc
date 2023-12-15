@@ -6,19 +6,16 @@ fn main() -> Result<()> {
     let mut input = String::new();
     fs::File::open(&input_file)?.read_to_string(&mut input)?;
 
-    let input = "
-            seeds: 79 14 55 13
-
-            seed-to-soil map:
-            50 98 2
-            52 50 48";
-
-    println!("Part 1: {}", part_one(&input));
+    // println!("Part 1: {}", part_one(&input));
     // println!("Part 2: {}", part_two(&input));
 
-    Ok(())
+    todo!(
+        "I somehow managed to lose the solution for this day. It wasn't great either way so \
+           I should give it another try I guess..."
+    )
 }
 
+#[allow(dead_code)]
 fn parse_map(input: &str) -> HashMap<Range<usize>, Range<usize>> {
     input
         .lines()
@@ -33,29 +30,24 @@ fn parse_map(input: &str) -> HashMap<Range<usize>, Range<usize>> {
             else {
                 panic!("");
             };
-
             (src_start..src_start + len, dest_start..dest_start + len)
         })
         .collect()
 }
 
+#[allow(dead_code)]
 fn part_one(input: &str) -> u32 {
-    let lines = input
+    let _lines = input
         .lines()
         .skip(3)
         .take_while(|line| line.trim() != "")
         .collect::<String>();
 
-    println!("{}", lines);
-
-    let seed_to_soil = parse_map(&lines);
-
-    println!("{:?}", seed_to_soil);
-
     0
 }
 
-fn part_two(input: &str) -> u32 {
+#[allow(dead_code)]
+fn part_two(_input: &str) -> u32 {
     0
 }
 
@@ -115,6 +107,6 @@ mod tests {
             60 56 37
             56 93 4
             ";
-        assert_eq!(0, part_one(input));
+        assert_eq!(35, part_one(input));
     }
 }
