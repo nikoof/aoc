@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use petgraph::graph::UnGraph;
 use std::collections::HashSet;
-use std::{env, fs, io::Read, str::FromStr};
+use std::{env, fs, io::Read};
 
 /* This solution is an abomination, and is probably way slower than it should be. But at least now
 * I have an inkling of how to use petgraph...
@@ -53,21 +53,6 @@ impl TryFrom<char> for Tile {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct Grid(Vec<Vec<Tile>>);
-
-impl FromStr for Grid {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(
-            s.lines()
-                .map(|line| line.chars().map(|ch| Tile::try_from(ch)).collect())
-                .collect::<Result<Vec<Vec<Tile>>>>()?,
-        ))
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Direction {
     Up,
@@ -76,28 +61,30 @@ enum Direction {
     Right,
 }
 
-fn beam_graph(grid: &Grid, start: (usize, usize, Direction)) -> UnGraph<(usize, usize), Direction> {
-    let mut graph = UnGraph::default();
+fn beam_graph(
+    grid: &Vec<Vec<Tile>>,
+    start: (usize, usize, Direction),
+) -> UnGraph<(usize, usize), Direction> {
+    let mut beam = UnGraph::default();
 
     let (row, col, dir) = start;
-    let root = graph.add_node((row, col));
-    let edge = graph.add_edge(root, root, dir);
+    let root = beam.add_node((row, col));
+    let edge = beam.add_edge(root, root, dir);
 
-    let mut leaves = vec![(edge, root)];
+    let mut beam_heads = vec![(edge, root)];
     let mut visited: HashSet<(usize, usize, Direction)> = HashSet::new();
 
     loop {
-        let mut new_leaves = Vec::new();
+        let mut new_heads = Vec::new();
         let mut visited_new_node = false;
-        for &(edge, leaf) in &leaves {
-            visited_new_node =
-                visited_new_node || visited.insert((graph[leaf].0, graph[leaf].1, graph[edge]));
+        for &(came_from, head) in &beam_heads {
+            let (row, col) = beam[head];
+            let current_direction = beam[came_from];
 
-            let (row, col) = graph[leaf];
-            let current_direction = graph[edge];
+            visited_new_node = visited_new_node || visited.insert((row, col, current_direction));
 
             use Direction::*;
-            let new_directions = match grid.0[row][col] {
+            let new_directions = match grid[row][col] {
                 Tile::Space => vec![current_direction],
                 Tile::LeftMirror => vec![match current_direction {
                     Up => Left,
@@ -121,74 +108,83 @@ fn beam_graph(grid: &Grid, start: (usize, usize, Direction)) -> UnGraph<(usize, 
                 },
             };
 
-            for direction in new_directions {
-                let new_position = match direction {
+            for new_direction in new_directions {
+                if let Some(next_position) = match new_direction {
                     Up => row.checked_sub(1).map(|r| (r, col)),
-                    Down => (row + 1 < grid.0.len()).then_some((row + 1, col)),
+                    Down => (row + 1 < grid.len()).then_some((row + 1, col)),
                     Left => col.checked_sub(1).map(|c| (row, c)),
-                    Right => (col + 1 < grid.0[row].len()).then_some((row, col + 1)),
-                };
-
-                if let Some(new_position) = new_position {
-                    if let Some(dest) = graph
+                    Right => (col + 1 < grid[row].len()).then_some((row, col + 1)),
+                } {
+                    if let Some(new_head) = beam
                         .node_indices()
-                        .find(|&index| graph[index] == new_position)
+                        .find(|&index| beam[index] == next_position)
                     {
-                        if let None = graph
-                            .edge_indices()
-                            .filter(|&e| graph.edge_endpoints(e).unwrap() == (leaf, dest))
-                            .find(|&e| graph[e] == direction)
+                        if !beam
+                            .edges_connecting(head, new_head)
+                            .any(|edge| edge.weight() == &new_direction)
                         {
-                            let new_edge = graph.add_edge(leaf, dest, direction);
-                            new_leaves.push((new_edge, dest));
+                            let new_edge = beam.add_edge(head, new_head, new_direction);
+                            new_heads.push((new_edge, new_head));
                         }
                     } else {
-                        let new_node = graph.add_node(new_position);
-                        let new_edge = graph.add_edge(leaf, new_node, direction);
+                        let new_node = beam.add_node(next_position);
+                        let new_edge = beam.add_edge(head, new_node, new_direction);
 
-                        new_leaves.push((new_edge, new_node));
+                        new_heads.push((new_edge, new_node));
                     }
                 }
             }
         }
 
+        beam_heads = new_heads;
+
         if !visited_new_node {
             break;
         }
-
-        leaves = new_leaves;
     }
 
-    graph
+    beam
 }
 
 fn part_one(input: &str) -> usize {
-    let grid = Grid::from_str(input).unwrap();
+    let grid = input
+        .lines()
+        .map(|line| line.chars().map(|ch| Tile::try_from(ch)).collect())
+        .collect::<Result<Vec<Vec<Tile>>>>()
+        .unwrap();
 
     beam_graph(&grid, (0, 0, Direction::Right)).node_count()
 }
 
 fn part_two(input: &str) -> usize {
-    let grid = Grid::from_str(input).unwrap();
+    let grid = input
+        .lines()
+        .map(|line| line.chars().map(|ch| Tile::try_from(ch)).collect())
+        .collect::<Result<Vec<Vec<Tile>>>>()
+        .unwrap();
 
-    (0..grid.0.len())
+    let (width, height) = (grid[0].len(), grid.len());
+    let vertical = (0..grid.len())
         .map(|i| {
-            beam_graph(&grid, (i, 0, Direction::Right))
-                .node_count()
-                .max(beam_graph(&grid, (i, grid.0[0].len() - 1, Direction::Left)).node_count())
+            let left = beam_graph(&grid, (i, 0, Direction::Right)).node_count();
+            let right = beam_graph(&grid, (i, width - 1, Direction::Left)).node_count();
+
+            left.max(right)
         })
         .max()
-        .unwrap()
-        .max(
-            (0..grid.0[0].len())
-                .map(|j| {
-                    beam_graph(&grid, (0, j, Direction::Down))
-                        .node_count()
-                        .max(beam_graph(&grid, (grid.0.len() - 1, j, Direction::Up)).node_count())
-                })
-                .max()
-                .unwrap(),
-        )
+        .unwrap();
+
+    let horizontal = (0..grid[0].len())
+        .map(|j| {
+            let up = beam_graph(&grid, (0, j, Direction::Down)).node_count();
+            let down = beam_graph(&grid, (height - 1, j, Direction::Up)).node_count();
+
+            up.max(down)
+        })
+        .max()
+        .unwrap();
+
+    vertical.max(horizontal)
 }
 
 #[cfg(test)]
