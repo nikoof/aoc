@@ -1,7 +1,7 @@
 use crate::workflow::{Rule, Workflow, WorkflowResult};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::{env, fs, io::Read};
 
@@ -84,61 +84,59 @@ fn count_matches(
 ) -> usize {
     if let Some(workflow) = workflows.get(&current_workflow) {
         if let Some(rule) = workflow.rules.get(rule_index) {
-            let mut new_ranges = ranges.clone();
-            if let Some(attr) = rule.attr() {
-                new_ranges[attr] = match rule {
-                    Rule::GreaterThan {
-                        attr: _,
-                        value,
-                        result: _,
-                    } => *value + 1..new_ranges[attr].end,
-                    Rule::LessThan {
-                        attr: _,
-                        value,
-                        result: _,
-                    } => new_ranges[attr].start..*value,
-                    Rule::Always { .. } => new_ranges[attr].clone(),
-                }
-            }
-
-            let matches = match rule.result() {
-                // Base case
-                WorkflowResult::Rejected => 0,
-                WorkflowResult::Accepted => new_ranges.iter().map(|range| range.len()).product(),
-
-                // Recursive case (for matching values)
-                WorkflowResult::Jump(next_workflow) => {
-                    count_matches(workflows, next_workflow, 0, new_ranges)
-                }
+            let (matching_range, non_matching_range) = match rule {
+                Rule::GreaterThan {
+                    attr,
+                    value,
+                    result: _,
+                } => (*value + 1..ranges[*attr].end, ranges[*attr].start..*value),
+                Rule::LessThan {
+                    attr,
+                    value,
+                    result: _,
+                } => (ranges[*attr].start..*value, *value..ranges[*attr].end),
+                Rule::Always { result: _ } => (1..0, 1..0),
             };
 
-            // Recursive case (for non-matching values)
-            let mut new_ranges = ranges.clone();
-            if let Some(attr) = rule.attr() {
-                new_ranges[attr] = match rule {
-                    Rule::GreaterThan {
-                        attr: _,
-                        value,
-                        result: _,
-                    } => new_ranges[attr].start..*value + 1,
-                    Rule::LessThan {
-                        attr: _,
-                        value,
-                        result: _,
-                    } => *value..new_ranges[attr].end,
-                    Rule::Always { .. } => new_ranges[attr].clone(),
+            if let WorkflowResult::Accepted = rule.result() {
+                let mut new_ranges = ranges.clone();
+                if let Some(attr) = rule.attr() {
+                    new_ranges[attr] = matching_range;
+                }
+                return new_ranges.iter().map(|range| range.len()).product();
+            } else if let WorkflowResult::Rejected = rule.result() {
+                return 0;
+            }
+
+            let mut total = 0;
+
+            if matching_range.len() != 0 {
+                let mut new_ranges = ranges.clone();
+                if let Some(attr) = rule.attr() {
+                    new_ranges[attr] = matching_range;
+                }
+                if let WorkflowResult::Jump(next_flow) = rule.result() {
+                    total += count_matches(workflows, next_flow, 0, new_ranges);
                 }
             }
-            let non_matches = count_matches(
-                workflows,
-                current_workflow.clone(),
-                rule_index + 1,
-                new_ranges,
-            );
 
-            return matches + non_matches;
+            if non_matching_range.len() != 0 {
+                let mut new_ranges = ranges.clone();
+                if let Some(attr) = rule.attr() {
+                    new_ranges[attr] = non_matching_range;
+                }
+                total += count_matches(
+                    workflows,
+                    current_workflow.clone(),
+                    rule_index + 1,
+                    new_ranges,
+                );
+            }
+
+            return total;
         }
     }
+
     0
 }
 

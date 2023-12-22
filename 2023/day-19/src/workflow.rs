@@ -34,6 +34,7 @@ impl Rule {
             Rule::Always { .. } => None,
         }
     }
+
     pub fn result(&self) -> WorkflowResult {
         match self {
             Rule::GreaterThan {
