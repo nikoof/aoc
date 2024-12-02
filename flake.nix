@@ -13,9 +13,12 @@
     utils.lib.eachDefaultSystem (system:
     let
       pkgs = import nixpkgs { inherit system; };
+      haskell = pkgs.haskellPackages.ghcWithPackages (pkgs: with pkgs; [
+        
+      ]);
     in
     {
-      devShell = with pkgs;
+      devShells."2023" = with pkgs;
         mkShell {
           buildInputs = [
             cargo
@@ -24,6 +27,13 @@
             rust-analyzer
           ];
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
+        };
+
+      devShells."2024" = with pkgs;
+        mkShell {
+          packages = [
+            haskell
+          ];
         };
     }
     );
