@@ -5,11 +5,10 @@ parseInput :: String -> IO [[Int]]
 parseInput filePath = readFile filePath <&> (map (map read . words) . lines)
 
 validReport :: [Int] -> Bool
-validReport report =
-  let diffs = zipWith (-) (tail report) report
-      monotone = liftM2 (||) (all (< 0)) (all (> 0))
-      diffConstraints = all (\x -> 1 <= x && x <= 3)
-   in monotone diffs && (diffConstraints . map abs $ diffs)
+validReport = ((&&) <$> monotone <*> diffConstraints . map abs) . (zipWith (-) <$> tail <*> id)
+  where
+    monotone = (||) <$> all (< 0) <*> all (> 0)
+    diffConstraints = all $ (&&) <$> (1 <=) <*> (<= 3)
 
 part1 :: [[Int]] -> Int
 part1 = length . filter validReport
