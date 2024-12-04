@@ -14,7 +14,9 @@
     let
       pkgs = import nixpkgs { inherit system; };
       haskell = pkgs.haskellPackages.ghcWithPackages (pkgs: with pkgs; [
-        
+        regex
+        split
+        matrix
       ]);
     in
     {
